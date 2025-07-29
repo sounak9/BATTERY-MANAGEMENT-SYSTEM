@@ -1,0 +1,30 @@
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime files
+*.log
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# IDE-specific
+.vscode/
+.idea/
+*.swp
+
+# Optional: Build/Dist output (if using bundlers)
+dist/
+build/
