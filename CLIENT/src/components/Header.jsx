@@ -1,38 +1,20 @@
 import React from "react";
-import { Flex, Box, Text, Icon } from "@chakra-ui/react";
 import { FaUserCircle } from "react-icons/fa";
 
 const Header = () => (
-  <Flex
-    bg="#14234C"
-    h="64px"
-    align="center"
-    justify="space-between"
-    px={6}
-    boxShadow="xl"
-    borderBottomRadius="xl"
-  >
-    <Box>
-      <Text
-        fontSize={{ base: "xl", md: "2xl" }}
-        fontWeight="bold"
-        color="white"
-        letterSpacing="wide"
-      >
+  <div className="bg-[#14234C] h-16 flex items-center justify-between px-6 shadow-xl rounded-b-xl">
+    <div>
+      <h1 className="text-white text-xl md:text-2xl font-bold tracking-wide">
         Battery Monitoring Dashboard
-      </Text>
-    </Box>
-    <Flex align="center" gap={4}>
-      <Icon
-        as={FaUserCircle}
-        color="gray.300"
-        boxSize={10}
-        cursor="pointer"
-        transition="all 0.3s"
-        _hover={{ color: "white", transform: "scale(1.1)" }}
+      </h1>
+    </div>
+    <div className="flex items-center gap-4">
+      <FaUserCircle
+        className="text-gray-300 hover:text-white transition-all duration-300 transform hover:scale-110 cursor-pointer"
+        size={40}
       />
-    </Flex>
-  </Flex>
+    </div>
+  </div>
 );
 
 export default Header;

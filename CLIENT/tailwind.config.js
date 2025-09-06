@@ -1,13 +1,10 @@
-/* eslint-disable no-undef */
-export default {
-  content: ["./index.html", "./src/**/*.{js,jsx}"],
+module.exports = {
+  content: [
+    "./src/**/*.{js,jsx,ts,tsx}",
+  ],
   theme: {
-    extend: {
-      colors: {
-        "dark-blue-main": "#1A2B5B",
-        "dark-blue-card": "#22336A",
-      },
-    },
+    extend: {},
   },
   plugins: [],
-};
+}
+

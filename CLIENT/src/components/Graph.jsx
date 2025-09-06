@@ -1,5 +1,4 @@
 import React, { useRef, useEffect } from "react";
-import { Box } from "@chakra-ui/react";
 import Chart from "chart.js/auto";
 
 export default function Graph({ id, type, data, options }) {
@@ -8,16 +7,35 @@ export default function Graph({ id, type, data, options }) {
 
   useEffect(() => {
     const ctx = canvasRef.current.getContext("2d");
+
     chartRef.current = new Chart(ctx, {
       type,
       data,
       options: {
-        ...options,
-        animation: false,
-        animations: false,
+        responsive: true,
         maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: {
+            labels: {
+              color: "#ffffff",
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: "#ffffff" },
+            grid: { color: "rgba(255,255,255,0.1)" },
+          },
+          y: {
+            ticks: { color: "#ffffff" },
+            grid: { color: "rgba(255,255,255,0.1)" },
+          },
+        },
+        ...options,
       },
     });
+
     return () => chartRef.current.destroy();
   }, [type, options]);
 
@@ -29,25 +47,14 @@ export default function Graph({ id, type, data, options }) {
   }, [data]);
 
   return (
-    <Box
-      bg="blue.800"
-      p={4}
-      borderRadius="xl"
-      boxShadow="lg"
-      height="400px"
-      overflow="hidden"
-    >
+    <div className="bg-[#14234C] p-4 rounded-xl shadow-lg h-[400px] overflow-hidden">
       <canvas
         ref={canvasRef}
         id={id}
         width={600}
         height={320}
-        style={{ width: "100%", height: "100%", display: "block" }}
+        className="w-full h-full block"
       />
-    </Box>
+    </div>
   );
 }
-
-Graph.defaultProps = {
-  options: { responsive: true, animation: false, animations: false },
-};

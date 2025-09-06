@@ -1,15 +1,4 @@
 import React, { useEffect, useState } from "react";
-import {
-  Box,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
-  Text,
-  Spinner,
-} from "@chakra-ui/react";
 import { fetchSensorLogs } from "../api/sensor.js";
 
 export default function DataLogs() {
@@ -24,36 +13,40 @@ export default function DataLogs() {
   }, []);
 
   return (
-    <Box bg="blue.800" borderRadius="xl" boxShadow="lg" p={6} mb={8}>
-      <Text color="white" fontSize="lg" fontWeight="semibold" mb={4}>
-        Data Logs
-      </Text>
-      <Box overflowX="auto">
+    <div className="bg-[#14234C] rounded-xl shadow-lg p-6 mb-8">
+      <h2 className="text-white text-lg font-semibold mb-4">Data Logs</h2>
+
+      <div className="overflow-x-auto">
         {loading ? (
-          <Spinner color="teal.300" />
+          <div className="flex justify-center items-center h-24">
+            <div className="animate-spin rounded-full h-8 w-8 border-4 border-t-teal-300 border-white"></div>
+          </div>
         ) : (
-          <Table variant="simple" colorScheme="teal">
-            <Thead>
-              <Tr>
-                <Th color="gray.400">Time</Th>
-                <Th color="gray.400">Voltage</Th>
-                <Th color="gray.400">Temp</Th>
-                <Th color="gray.400">Current</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
+          <table className="min-w-full table-auto">
+            <thead>
+              <tr className="text-left text-gray-400 border-b border-gray-600">
+                <th className="px-4 py-2">Time</th>
+                <th className="px-4 py-2">Voltage</th>
+                <th className="px-4 py-2">Temp</th>
+                <th className="px-4 py-2">Current</th>
+              </tr>
+            </thead>
+            <tbody>
               {logs.map((log, idx) => (
-                <Tr key={idx}>
-                  <Td color="gray.300">{log.timestamp}</Td>
-                  <Td color="gray.300">{log.voltage}</Td>
-                  <Td color="gray.300">{log.temperature}</Td>
-                  <Td color="gray.300">{log.current}</Td>
-                </Tr>
+                <tr
+                  key={idx}
+                  className="border-b border-gray-700 hover:bg-blue-700 transition-colors"
+                >
+                  <td className="px-4 py-2 text-gray-300">{log.timestamp}</td>
+                  <td className="px-4 py-2 text-gray-300">{log.voltage}</td>
+                  <td className="px-4 py-2 text-gray-300">{log.temperature}</td>
+                  <td className="px-4 py-2 text-gray-300">{log.current}</td>
+                </tr>
               ))}
-            </Tbody>
-          </Table>
+            </tbody>
+          </table>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

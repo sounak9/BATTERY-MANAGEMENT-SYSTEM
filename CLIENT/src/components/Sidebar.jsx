@@ -1,5 +1,4 @@
 import React from "react";
-import { VStack, Box, Text } from "@chakra-ui/react";
 import { NavLink } from "react-router-dom";
 import {
   MdDashboard,
@@ -17,58 +16,35 @@ const sidebarItems = [
 ];
 
 const Sidebar = () => (
-  <Box
-    bg="#14234C"
-    w="80px"
-    py={8}
-    px={2}
-    minH="calc(100vh - 64px)"
-    boxShadow="xl"
-    borderRightRadius="xl"
-    display="flex"
-    flexDirection="column"
-    alignItems="center"
-  >
-    <VStack spacing={8} align="center" w="100%">
-      {sidebarItems.map((item, idx) => (
+  <div className="bg-[#14234C] w-20 py-8 px-2 min-h-[calc(100vh-64px)] shadow-xl rounded-r-xl flex flex-col items-center">
+    <div className="flex flex-col items-center space-y-8 w-full">
+      {sidebarItems.map((item) => (
         <NavLink
           key={item.label}
           to={item.to}
-          style={{ width: "100%" }}
-          className={({ isActive }) => (isActive ? "sidebar-item-active" : "")}
+          className={({ isActive }) =>
+            `w-full flex flex-col items-center text-gray-400 transition-transform duration-200 hover:text-white hover:scale-105 ${
+              isActive ? "text-white font-semibold" : ""
+            }`
+          }
         >
-          <Box
-            display="flex"
-            flexDirection="column"
-            alignItems="center"
-            cursor="pointer"
-            color="gray.400"
-            _hover={{ color: "white", transform: "scale(1.05)" }}
-            transition="all 0.2s"
-          >
-            {item.icon}
-            <Text fontSize="xs" fontWeight="medium">
-              {item.label}
-            </Text>
-          </Box>
+          {item.icon}
+          <span className="text-xs font-medium mt-1">{item.label}</span>
         </NavLink>
       ))}
-    </VStack>
-    <Box flexGrow={1} /> {/* Spacer to push logout down */}
-    <Box
-      display="flex"
-      flexDirection="column"
-      alignItems="center"
-      cursor="pointer"
-      color="gray.400"
-      _hover={{ color: "white" }}
+    </div>
+    <div className="flex-grow" /> {/* Spacer */}
+    <div
+      className="flex flex-col items-center text-gray-400 hover:text-white cursor-pointer mt-8"
+      onClick={() => {
+        localStorage.removeItem("isAuthenticated");
+        window.location.href = "/login";
+      }}
     >
-      <MdLogout size={28} style={{ marginBottom: 8 }} />
-      <Text fontSize="xs" fontWeight="medium">
-        Logout
-      </Text>
-    </Box>
-  </Box>
+      <MdLogout size={28} className="mb-2" />
+      <span className="text-xs font-medium">Logout</span>
+    </div>
+  </div>
 );
 
 export default Sidebar;
