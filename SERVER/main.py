@@ -1,12 +1,22 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect, url_for
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import os
-from models import db, CompanyProfile, TblUser
+from models import (
+    db,
+    CompanyProfile,
+    TblUser,
+    Product,
+    BattDescription,
+    BattHealth,
+    BattFaultLog,
+)
 import jwt
 from datetime import datetime, timedelta
+from authlib.integrations.flask_client import OAuth
 
+# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
@@ -15,11 +25,36 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
-CORS(app, origins=["http://localhost:5173", "http://localhost:3000"])
+CORS(app, origins=[
+    os.getenv("CORS_ORIGIN1", "http://localhost:5173"),
+    os.getenv("CORS_ORIGIN2", "http://localhost:3000")
+])
 
-JWT_SECRET = os.environ.get('JWT_SECRET', 'dev_secret')
-JWT_EXPIRY_MINUTES = int(os.environ.get('JWT_EXPIRY_MINUTES', 60))
+JWT_SECRET = os.getenv('JWT_SECRET', 'dev_secret')
+JWT_EXPIRY_MINUTES = int(os.getenv('JWT_EXPIRY_MINUTES', 60))
 
+# Google OAuth
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
+GOOGLE_DISCOVERY_URL = os.getenv(
+    'GOOGLE_DISCOVERY_URL',
+    "https://accounts.google.com/.well-known/openid-configuration"
+)
+
+oauth = OAuth(app)
+google = oauth.register(
+    name='google',
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    server_metadata_url=GOOGLE_DISCOVERY_URL,
+    client_kwargs={'scope': 'openid email profile'}
+)
+
+if google is None:
+    raise RuntimeError("Google OAuth registration failed. Check your environment variables.")
+
+
+# ---------------- JWT Helper ----------------
 def create_jwt(user):
     payload = {
         'u_id': user.u_id,
@@ -29,6 +64,8 @@ def create_jwt(user):
     }
     return jwt.encode(payload, JWT_SECRET, algorithm='HS256')
 
+
+# ---------------- AUTH ROUTES ----------------
 @app.route('/api/auth/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -39,6 +76,8 @@ def login():
             "company_name": user.company.company_name,
         } if user.company else None
         token = create_jwt(user)
+        user.last_login = datetime.utcnow()
+        db.session.commit()
         return jsonify({
             'message': 'Login successful',
             'token': token,
@@ -49,23 +88,29 @@ def login():
         })
     return jsonify({'error': 'Invalid credentials'}), 401
 
+
 @app.route('/api/auth/register', methods=['POST'])
 def register():
     data = request.get_json()
     if not data:
         return jsonify({'error': 'No input data provided'}), 400
-    required_fields = ("username", "email", "password", "company_id")
+    required_fields = ("username", "email", "password", "company_id", "ph_no", "security_qn", "role")
     if not all(field in data for field in required_fields):
         return jsonify({'error': 'Missing fields'}), 400
     if TblUser.query.filter((TblUser.username == data['username']) | (TblUser.email == data['email'])).first():
         return jsonify({'error': 'User already exists'}), 409
+
     hashed_pw = generate_password_hash(data['password'])
-    user = TblUser()
-    user.username = data['username']
-    user.email = data['email']
-    user.password = hashed_pw
-    user.company_id = data['company_id']
-    user.security_qn = data.get('security_qn')
+    user = TblUser(
+        username=data['username'],
+        email=data['email'],
+        password=hashed_pw,
+        company_id=data['company_id'],
+        ph_no=data['ph_no'],
+        security_qn=data['security_qn'],
+        ip=request.remote_addr,
+        role=data['role'],
+    )
     try:
         db.session.add(user)
         db.session.commit()
@@ -75,12 +120,66 @@ def register():
         return jsonify({'error': 'Database error', 'details': str(e)}), 500
     return jsonify({'message': 'User registered successfully', 'token': token}), 201
 
+
+@app.route('/api/auth/google')
+def google_login():
+    redirect_uri = url_for('google_callback', _external=True)
+    return google.authorize_redirect(redirect_uri)
+
+
+@app.route('/api/auth/google/callback')
+def google_callback():
+    if google is None:
+        return jsonify({"error": "Google OAuth client not registered"}), 500
+    token = google.authorize_access_token()
+    if not token:
+        return jsonify({"error": "Failed to get access token from Google"}), 400
+    userinfo = google.parse_id_token(token)
+    if not userinfo:
+        return jsonify({"error": "Failed to parse user info from token"}), 400
+
+    email = userinfo.get('email')
+    username = userinfo.get('name', email.split('@')[0])
+    user = TblUser.query.filter_by(email=email).first()
+
+    if not user:
+        user = TblUser(
+            username=username,
+            email=email,
+            password=generate_password_hash(os.urandom(16).hex()),
+            company_id=None,
+            ph_no=None,
+            security_qn=None,
+            ip=request.remote_addr,
+            role=os.getenv("DEFAULT_USER_ROLE", "user"),
+            created_at=datetime.utcnow()
+        )
+        db.session.add(user)
+        db.session.commit()
+
+    access_token = create_jwt(user)
+    return jsonify({
+        'message': 'Google login successful',
+        'token': access_token,
+        'u_id': user.u_id,
+        'username': user.username,
+        'email': user.email,
+        'company_id': user.company_id,
+        'role': user.role
+    })
+
+
+# ---------------- ROOT ROUTE ----------------
 @app.route("/")
 def home():
     return {"message": "Flask Auth Server is running."}
 
+
+# ---------------- RUN APP ----------------
 if __name__ == '__main__':
-    # Ensure tables are created before starting the server
     with app.app_context():
-        db.create_all()
-    app.run(host='0.0.0.0', port=8000)
+        db.create_all()  # will ensure all tables exist
+    app.run(
+        host=os.getenv("FLASK_RUN_HOST", "0.0.0.0"),
+        port=int(os.getenv("FLASK_RUN_PORT", 8000))
+    )
