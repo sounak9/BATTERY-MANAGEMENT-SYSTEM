@@ -1,5 +1,6 @@
 import React from "react";
 import { FaUserCircle } from "react-icons/fa";
+import { Link } from "react-router-dom";
 
 const Header = () => (
   <div className="bg-[#14234C] h-16 flex items-center justify-between px-6 shadow-xl rounded-b-xl">
@@ -9,10 +10,12 @@ const Header = () => (
       </h1>
     </div>
     <div className="flex items-center gap-4">
-      <FaUserCircle
-        className="text-gray-300 hover:text-white transition-all duration-300 transform hover:scale-110 cursor-pointer"
-        size={40}
-      />
+      <Link to="/profile">
+        <FaUserCircle
+          className="text-gray-300 hover:text-white transition-all duration-300 transform hover:scale-110 cursor-pointer"
+          size={40}
+        />
+      </Link>
     </div>
   </div>
 );

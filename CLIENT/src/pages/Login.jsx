@@ -55,6 +55,14 @@ export default function Login() {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
+          <div className="text-center mt-2">
+            <Link
+              to="/forgot-password"
+              className="text-blue-600 hover:underline"
+            >
+              Forgot Password?
+            </Link>
+          </div>
           <button
             type="submit"
             className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"

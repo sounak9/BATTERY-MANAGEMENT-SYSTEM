@@ -9,6 +9,7 @@ export default function Register() {
     company_id: "",
     ph_no: "",
     security_qn: "",
+    security_ans: "", // new field
     role: "user", // default
   });
   const [error, setError] = useState("");
@@ -99,14 +100,41 @@ export default function Register() {
             onChange={handleChange}
             className="w-full p-2 border rounded text-black"
           />
-          <input
-            type="text"
+
+          {/* Security Question Dropdown */}
+          <select
             name="security_qn"
-            placeholder="Security Question"
             value={form.security_qn}
             onChange={handleChange}
             className="w-full p-2 border rounded text-black"
+            required
+          >
+            <option value="">-- Select Security Question --</option>
+            <option value="pet_name">
+              What was the name of your first pet?
+            </option>
+            <option value="first_school">
+              What was the name of your first school?
+            </option>
+            <option value="birth_city">In what city were you born?</option>
+            <option value="childhood_nickname">
+              What was your childhood nickname?
+            </option>
+            <option value="favorite_teacher">
+              What is the name of your favorite teacher?
+            </option>
+          </select>
+
+          <input
+            type="text"
+            name="security_ans"
+            placeholder="Your Answer"
+            value={form.security_ans}
+            onChange={handleChange}
+            className="w-full p-2 border rounded text-black"
+            required
           />
+
           <select
             name="role"
             value={form.role}

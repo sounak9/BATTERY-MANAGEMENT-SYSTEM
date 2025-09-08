@@ -13,6 +13,8 @@ import DataLogs from "./pages/DataLogs";
 import Sensors from "./pages/Sensors";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Profile from "./pages/UserProfile";
+import ForgotPassword from "./pages/ForgotPassword";
 
 // Simple auth check using localStorage
 function RequireAuth({ children }) {
@@ -30,6 +32,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route
           path="/*"
           element={
@@ -43,6 +46,7 @@ export default function App() {
                       <Route path="/" element={<Dashboard />} />
                       <Route path="/data-logs" element={<DataLogs />} />
                       <Route path="/sensors" element={<Sensors />} />
+                      <Route path="/profile" element={<Profile />} />
                     </Routes>
                   </main>
                 </div>

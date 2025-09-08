@@ -138,6 +138,7 @@ def register():
         company_id=company_id,
         ph_no=data.get('ph_no'),
         security_qn=data.get('security_qn'),
+        security_ans=data.get('security_ans'),
         ip=request.remote_addr,
         role=data.get('role', 'user'),
     )
@@ -215,6 +216,40 @@ def google_callback():
         'company_id': user.company_id,
         'role': user.role
     })
+@app.route("/api/auth/forgot-password", methods=["POST"])
+def forgot_password():
+    data = request.get_json()
+    email = data.get("email")
+
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+
+    user = TblUser.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    return jsonify({"security_qn": user.security_qn}), 200
+@app.route("/api/auth/reset-password", methods=["POST"])
+def reset_password():
+    data = request.get_json()
+    email = data.get("email")
+    answer = data.get("security_ans")
+    new_password = data.get("new_password")
+
+    if not all([email, answer, new_password]):
+        return jsonify({"error": "All fields are required"}), 400
+
+    user = TblUser.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    if user.security_ans.strip().lower() != answer.strip().lower():
+        return jsonify({"error": "Incorrect security answer"}), 400
+
+    user.password = generate_password_hash(new_password)
+    db.session.commit()
+
+    return jsonify({"message": "Password reset successful"}), 200
 
 
 # ---------------- ROOT ROUTE ----------------

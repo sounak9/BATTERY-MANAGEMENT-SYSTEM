@@ -33,6 +33,7 @@ class TblUser(db.Model):
     email = db.Column(db.String(100), unique=True, nullable=False)
     ph_no = db.Column(db.String(15))
     security_qn = db.Column(db.Text)
+    security_ans = db.Column(db.String(255))
     ip = db.Column(db.String(50))
     role = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
