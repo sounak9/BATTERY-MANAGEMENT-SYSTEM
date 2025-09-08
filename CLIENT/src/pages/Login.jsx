@@ -1,74 +1,75 @@
 import React, { useState } from "react";
-import axios from "axios";
+import { useNavigate, Link } from "react-router-dom";
 
-const API_URL = process.env.REACT_APP_API_URL;
-
-const Login = ({ onSwitch }) => {
+export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
     try {
-      const res = await axios.post(`${API_URL}/auth/login`, {
-        email,
-        password,
+      const res = await fetch("http://127.0.0.1:8000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
-      localStorage.setItem("token", res.data.token);
-      window.location.reload();
+
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("isAuthenticated", "true");
+        navigate("/"); // redirect to dashboard
+      } else {
+        setError(data.error || "Login failed");
+      }
     } catch (err) {
-      setError(err.response?.data?.error || "Login failed");
+      setError("Server error. Please try again.");
     }
   };
 
-  const handleGoogle = () => {
-    window.location.href = `${API_URL}/auth/google`;
-  };
-
   return (
-    <div className="max-w-md mx-auto p-8 bg-white rounded shadow">
-      <h2 className="text-2xl font-bold mb-4">Login</h2>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full mb-2 p-2 border rounded"
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full mb-2 p-2 border rounded"
-          required
-        />
-        {error && <div className="text-red-500 mb-2">{error}</div>}
-        <button
-          type="submit"
-          className="w-full bg-blue-600 text-white p-2 rounded mb-2"
-        >
-          Login
-        </button>
-      </form>
-      <button
-        onClick={handleGoogle}
-        className="w-full bg-red-500 text-white p-2 rounded mb-2"
-      >
-        Login with Google
-      </button>
-      <div className="text-center mt-2">
-        Don't have an account?{" "}
-        <button className="text-blue-600" onClick={onSwitch}>
-          Register
-        </button>
+    <div className="flex items-center justify-center min-h-screen bg-[#1A2B5B]">
+      <div className="bg-white p-8 rounded-xl shadow-md w-full max-w-sm">
+        <h2 className="text-xl font-bold text-center mb-4 text-black">Login</h2>
+
+        {error && <p className="text-red-500 mb-2">{error}</p>}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="email"
+            placeholder="Email"
+            className="w-full p-2 border rounded text-black"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            className="w-full p-2 border rounded text-black"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+          >
+            Login
+          </button>
+        </form>
+
+        <div className="text-center mt-2 text-black">
+          Don't have an account?{" "}
+          <Link to="/register" className="text-blue-600 hover:underline">
+            Register
+          </Link>
+        </div>
       </div>
     </div>
   );
-};
-
-export default Login;
+}

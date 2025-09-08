@@ -70,14 +70,22 @@ def create_jwt(user):
 def login():
     data = request.get_json()
     user = TblUser.query.filter_by(email=data.get('email')).first()
+
     if user and check_password_hash(user.password, data.get('password')):
-        company_info = {
-            "company_id": user.company.company_id,
-            "company_name": user.company.company_name,
-        } if user.company else None
         token = create_jwt(user)
         user.last_login = datetime.utcnow()
         db.session.commit()
+
+        company_info = None
+        if user.company:
+            company_info = {
+                "company_id": user.company.company_id,
+                "company_name": user.company.company_name,
+                "email": user.company.email,
+                "is_active": user.company.is_active,
+                "created_at": user.company.created_at.isoformat() if user.company.created_at else None,
+            }
+
         return jsonify({
             'message': 'Login successful',
             'token': token,
@@ -85,8 +93,10 @@ def login():
             'username': user.username,
             'email': user.email,
             'company': company_info
-        })
+        }), 200
+
     return jsonify({'error': 'Invalid credentials'}), 401
+
 
 
 @app.route('/api/auth/register', methods=['POST'])
@@ -94,31 +104,69 @@ def register():
     data = request.get_json()
     if not data:
         return jsonify({'error': 'No input data provided'}), 400
-    required_fields = ("username", "email", "password", "company_id", "ph_no", "security_qn", "role")
+
+    required_fields = ("username", "email", "password")
     if not all(field in data for field in required_fields):
-        return jsonify({'error': 'Missing fields'}), 400
-    if TblUser.query.filter((TblUser.username == data['username']) | (TblUser.email == data['email'])).first():
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    # Check if user exists
+    if TblUser.query.filter(
+        (TblUser.username == data['username']) | (TblUser.email == data['email'])
+    ).first():
         return jsonify({'error': 'User already exists'}), 409
 
+    # Handle company_id
+    company_id = data.get("company_id")
+    company = None
+    if company_id:
+        company = CompanyProfile.query.get(company_id)
+        if not company:
+            return jsonify({'error': f'Company with ID {company_id} does not exist'}), 400
+    else:
+        # Auto-create default company if none provided
+        company = CompanyProfile(company_name="Default Company", email="default@company.com")
+        db.session.add(company)
+        db.session.flush()  # ensures company_id is generated
+        company_id = company.company_id
+
+    # Create user
     hashed_pw = generate_password_hash(data['password'])
     user = TblUser(
         username=data['username'],
         email=data['email'],
         password=hashed_pw,
-        company_id=data['company_id'],
-        ph_no=data['ph_no'],
-        security_qn=data['security_qn'],
+        company_id=company_id,
+        ph_no=data.get('ph_no'),
+        security_qn=data.get('security_qn'),
         ip=request.remote_addr,
-        role=data['role'],
+        role=data.get('role', 'user'),
     )
+
     try:
         db.session.add(user)
         db.session.commit()
         token = create_jwt(user)
+
+        company_info = {
+            "company_id": company.company_id,
+            "company_name": company.company_name,
+            "email": company.email,
+            "is_active": company.is_active,
+            "created_at": company.created_at.isoformat() if company.created_at else None,
+        }
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': 'Database error', 'details': str(e)}), 500
-    return jsonify({'message': 'User registered successfully', 'token': token}), 201
+
+    return jsonify({
+        'message': 'User registered successfully',
+        'token': token,
+        'u_id': user.u_id,
+        'username': user.username,
+        'email': user.email,
+        'company': company_info
+    }), 201
 
 
 @app.route('/api/auth/google')

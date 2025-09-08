@@ -11,7 +11,8 @@ import Header from "./components/Header";
 import Dashboard from "./pages/Dashboard";
 import DataLogs from "./pages/DataLogs";
 import Sensors from "./pages/Sensors";
-import AuthPage from "./pages/AuthPage";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 
 // Simple auth check using localStorage
 function RequireAuth({ children }) {
@@ -27,7 +28,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<AuthPage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
         <Route
           path="/*"
           element={
