@@ -7,6 +7,9 @@ export default function Login() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
+  const handleGoogleLogin = () => {
+    window.location.href = "http://127.0.0.1:8000/api/auth/google";
+  };
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -68,6 +71,12 @@ export default function Login() {
             className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
           >
             Login
+          </button>
+          <button
+            onClick={handleGoogleLogin}
+            className="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded mt-4"
+          >
+            Continue with Google
           </button>
         </form>
 

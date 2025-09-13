@@ -136,10 +136,10 @@ def register():
         email=data['email'],
         password=hashed_pw,
         company_id=company_id,
-        ph_no=data.get('ph_no'),
+        phone=data.get('ph_no'),
         security_qn=data.get('security_qn'),
         security_ans=data.get('security_ans'),
-        ip=request.remote_addr,
+        
         role=data.get('role', 'user'),
     )
 

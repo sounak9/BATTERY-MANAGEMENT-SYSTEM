@@ -96,7 +96,7 @@ export default function Register() {
             type="text"
             name="ph_no"
             placeholder="Phone Number"
-            value={form.ph_no}
+            value={form.phone}
             onChange={handleChange}
             className="w-full p-2 border rounded text-black"
           />
