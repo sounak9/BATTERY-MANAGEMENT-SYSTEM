@@ -11,6 +11,8 @@ from models import (
     BattDescription,
     BattHealth,
     BattFaultLog,
+    MqttData
+    
 )
 import jwt
 from datetime import datetime, timedelta
@@ -250,6 +252,50 @@ def reset_password():
     db.session.commit()
 
     return jsonify({"message": "Password reset successful"}), 200
+
+# ---------------- DATALOG ROUTE ----------------
+
+
+@app.route("/api/datalogs", methods=["GET"])
+def get_datalogs():
+    start_date = request.args.get("start")
+    end_date = request.args.get("end")
+    battery_id = request.args.get("battery_id")
+
+    query = db.session.query(MqttData)
+
+    if start_date:
+        try:
+            query = query.filter(MqttData.ts >= datetime.fromisoformat(start_date))
+        except Exception:
+            pass
+
+    if end_date:
+        try:
+            query = query.filter(MqttData.ts <= datetime.fromisoformat(end_date))
+        except Exception:
+            pass
+
+    if battery_id and battery_id.lower() != "all":
+        try:
+            query = query.filter(MqttData.battery_id == int(battery_id))
+        except ValueError:
+            pass
+
+    logs = query.order_by(MqttData.ts.desc()).all()
+
+    data = []
+    for log in logs:
+        data.append({
+            "timestamp": log.ts.isoformat(sep=" ", timespec="seconds"),
+            "current": str(log.current),
+            "temperature": str(log.temperature),
+            "voltage": str(log.voltage),
+            "batteryId": str(log.battery_id)
+        })
+
+    return jsonify(data), 200
+
 
 
 # ---------------- ROOT ROUTE ----------------

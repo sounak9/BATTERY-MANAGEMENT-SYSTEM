@@ -119,5 +119,18 @@ class BattFaultLog(db.Model):
 
     battery = db.relationship("BattDescription", back_populates="fault_logs")
 
+class MqttData(db.Model):
+    __tablename__ = "mqtt_data"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ts = db.Column(db.DateTime(timezone=True), nullable=False)
+    topic = db.Column(db.Text)
+    device_id = db.Column(db.Text)
+    battery_id = db.Column(db.Integer)
+    voltage = db.Column(db.Numeric(6, 3))
+    current = db.Column(db.Numeric(8, 3))
+    temperature = db.Column(db.Numeric(6, 3))
+    payload_json = db.Column(db.JSON)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
