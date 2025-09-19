@@ -8,6 +8,11 @@ export default function Graph({ id, type, data, options }) {
   useEffect(() => {
     const ctx = canvasRef.current.getContext("2d");
 
+    // Destroy any existing chart before creating a new one
+    if (chartRef.current) {
+      chartRef.current.destroy();
+    }
+
     chartRef.current = new Chart(ctx, {
       type,
       data,
@@ -37,14 +42,7 @@ export default function Graph({ id, type, data, options }) {
     });
 
     return () => chartRef.current.destroy();
-  }, [type, options]);
-
-  useEffect(() => {
-    if (chartRef.current) {
-      chartRef.current.data = data;
-      chartRef.current.update();
-    }
-  }, [data]);
+  }, [type, data, options]);
 
   return (
     <div className="bg-[#14234C] p-4 rounded-xl shadow-lg h-[400px] overflow-hidden">
