@@ -1,21 +1,44 @@
-import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, Link, useLocation } from "react-router-dom";
+import { getApiUrl } from "../lib/backend";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const err = params.get("error");
+    if (err === "oauth_state_mismatch") {
+      // If Google OAuth failed due to state mismatch, send user to register
+      // page so they can either retry or register manually. Preserve email/name
+      // if present.
+      const email = params.get("email");
+      const name = params.get("name");
+      const qs = new URLSearchParams();
+      if (email) qs.set("email", email);
+      if (name) qs.set("name", name);
+      qs.set("error", "oauth_state_mismatch");
+      navigate(`/register?${qs.toString()}`, { replace: true });
+    }
+  }, [location.search, navigate]);
 
   const handleGoogleLogin = () => {
-    window.location.href = "http://127.0.0.1:8000/api/auth/google";
+    // REACT_APP_API_URL may include a trailing '/api' (some setups), so
+    // normalize it to the backend origin (no trailing '/api') before
+    // building the oauth redirect URL.
+    const apiBase = getApiUrl();
+    window.location.href = `${apiBase}/auth/google`;
   };
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/auth/login", {
+      const res = await fetch(`${getApiUrl()}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),

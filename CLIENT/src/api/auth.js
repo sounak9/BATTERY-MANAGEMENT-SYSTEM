@@ -1,7 +1,7 @@
+import { getApiUrl } from "../lib/backend";
+
 const API_URL =
-  import.meta.env.VITE_API_URL ||
-  process.env.REACT_APP_API_URL ||
-  "http://localhost:8000/api";
+  import.meta.env.VITE_API_URL || process.env.REACT_APP_API_URL || getApiUrl();
 
 export async function registerUser({
   username,

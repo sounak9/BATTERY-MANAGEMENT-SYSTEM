@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 
 export default function Register() {
   const [form, setForm] = useState({
@@ -12,6 +12,8 @@ export default function Register() {
     security_ans: "", // new field
     role: "user", // default
   });
+  const location = useLocation();
+  const [fromOAuth, setFromOAuth] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
@@ -47,6 +49,40 @@ export default function Register() {
     }
   };
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const email = params.get("email");
+    const name = params.get("name");
+    const err = params.get("error");
+    if (email || name) {
+      const cleanEmail =
+        email && email !== "null" && email !== "undefined" ? email : undefined;
+      const cleanName =
+        name && name !== "null" && name !== "undefined" ? name : undefined;
+      setForm((f) => ({
+        ...f,
+        email: cleanEmail || f.email,
+        username: cleanName || f.username,
+      }));
+      setFromOAuth(Boolean(cleanEmail || cleanName));
+    }
+    if (err === "oauth_state_mismatch") {
+      setFromOAuth(false); // not a completed oauth flow
+      setError(
+        "We couldn't complete Google sign-in — you can retry or register manually."
+      );
+    }
+  }, [location.search]);
+
+  const retryGoogle = () => {
+    const apiBase =
+      (process.env.REACT_APP_API_URL || "http://localhost:8000")
+        .trim()
+        .replace(/\/$/, "")
+        .replace(/\/api$/, "") + "/api";
+    window.location.href = `${apiBase}/auth/google`;
+  };
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-[#1A2B5B]">
       <div className="bg-white p-8 rounded-xl shadow-md w-full max-w-sm">
@@ -57,6 +93,32 @@ export default function Register() {
         {error && <p className="text-red-500 mb-2">{error}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-3">
+          {fromOAuth && (
+            <div className="bg-blue-100 text-blue-800 p-2 rounded mb-2">
+              We found a Google account for <strong>{form.email}</strong>.
+              Please complete registration.
+            </div>
+          )}
+          {!fromOAuth && error && (
+            <div className="bg-yellow-100 text-yellow-800 p-2 rounded mb-2">
+              <div className="mb-2">{error}</div>
+              <div className="flex gap-2">
+                <button
+                  onClick={retryGoogle}
+                  className="px-3 py-1 bg-blue-600 text-white rounded"
+                >
+                  Retry Google Sign-in
+                </button>
+                <button
+                  onClick={() => {}}
+                  className="px-3 py-1 bg-gray-200 text-black rounded"
+                >
+                  Register manually
+                </button>
+              </div>
+            </div>
+          )}
+
           <input
             type="text"
             name="username"
@@ -74,6 +136,7 @@ export default function Register() {
             onChange={handleChange}
             className="w-full p-2 border rounded text-black"
             required
+            readOnly={fromOAuth}
           />
           <input
             type="password"
@@ -81,6 +144,7 @@ export default function Register() {
             placeholder="Password"
             value={form.password}
             onChange={handleChange}
+            autoFocus={fromOAuth}
             className="w-full p-2 border rounded text-black"
             required
           />
@@ -96,7 +160,7 @@ export default function Register() {
             type="text"
             name="ph_no"
             placeholder="Phone Number"
-            value={form.phone}
+            value={form.ph_no}
             onChange={handleChange}
             className="w-full p-2 border rounded text-black"
           />

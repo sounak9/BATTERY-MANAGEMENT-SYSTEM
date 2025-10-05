@@ -15,6 +15,8 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Profile from "./pages/UserProfile";
 import ForgotPassword from "./pages/ForgotPassword";
+import AuthCallback from "./pages/AuthCallback";
+import QAuth from "./pages/QAuth";
 
 // Simple auth check using localStorage
 function RequireAuth({ children }) {
@@ -31,6 +33,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/qauth" element={<QAuth />} />
+        <Route path="/oauth-callback" element={<AuthCallback />} />
         <Route path="/register" element={<Register />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route

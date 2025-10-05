@@ -24,50 +24,117 @@ const Dashboard = () => {
   const loadLogs = async () => {
     try {
       const data = await fetchDatalogs({ batteryId });
-      let filtered = data;
+
+      // Normalize incoming data: convert numeric fields (which may be strings)
+      // into Numbers so charts and cards can use them directly.
+      const normalized = (data || [])
+        .map((l) => {
+          // Ensure timestamp is an ISO-parseable string. Some backends send
+          // "YYYY-MM-DD HH:MM:SS" (space) which Date(...) can't reliably parse
+          // across browsers — replace the space with 'T' to make it ISO8601.
+          const rawTs = l.timestamp || "";
+          const isoTs =
+            rawTs.includes(" ") && !rawTs.includes("T")
+              ? rawTs.replace(" ", "T")
+              : rawTs;
+
+          const tsMs = Date.parse(isoTs);
+          return {
+            ...l,
+            voltage: l.voltage == null ? 0 : Number(l.voltage),
+            current: l.current == null ? 0 : Number(l.current),
+            temperature: l.temperature == null ? 0 : Number(l.temperature),
+            timestamp: isoTs,
+            timestampMs: isNaN(tsMs) ? null : tsMs,
+          };
+        })
+        // sort ascending by timestampMs (oldest -> newest). Invalid timestamps go last.
+        .sort((a, b) => {
+          if (a.timestampMs == null && b.timestampMs == null) return 0;
+          if (a.timestampMs == null) return 1;
+          if (b.timestampMs == null) return -1;
+          return a.timestampMs - b.timestampMs;
+        });
+
+      let filtered = normalized;
 
       // Apply time filtering
       const now = new Date();
       let cutoff = null;
       switch (timeRange) {
         case "1min":
-          cutoff = new Date(now.getTime() - 60 * 1000);
+          cutoff = new Date(Date.now() - 60 * 1000);
           break;
         case "30min":
-          cutoff = new Date(now.getTime() - 30 * 60 * 1000);
+          cutoff = new Date(Date.now() - 30 * 60 * 1000);
           break;
         case "1hr":
-          cutoff = new Date(now.getTime() - 60 * 60 * 1000);
+          cutoff = new Date(Date.now() - 60 * 60 * 1000);
           break;
         case "1day":
-          cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
           break;
-        case "1month":
-          cutoff = new Date(now.setMonth(now.getMonth() - 1));
+        case "1month": {
+          const d = new Date();
+          d.setMonth(d.getMonth() - 1);
+          cutoff = d;
           break;
-        case "6months":
-          cutoff = new Date(now.setMonth(now.getMonth() - 6));
+        }
+        case "6months": {
+          const d = new Date();
+          d.setMonth(d.getMonth() - 6);
+          cutoff = d;
           break;
-        case "1year":
-          cutoff = new Date(now.setFullYear(now.getFullYear() - 1));
+        }
+        case "1year": {
+          const d = new Date();
+          d.setFullYear(d.getFullYear() - 1);
+          cutoff = d;
           break;
+        }
         default:
           cutoff = null;
       }
 
       if (cutoff) {
-        filtered = data.filter((log) => new Date(log.timestamp) >= cutoff);
+        const cutoffMs = cutoff.getTime();
+        filtered = normalized.filter((log) => {
+          return log.timestampMs != null && log.timestampMs >= cutoffMs;
+        });
       }
 
-      setLogs(filtered);
+      // If filtering removed all entries but there is data, fall back to showing
+      // the full dataset so the cards/graphs don't appear empty.
+      const logsToUse = filtered.length > 0 ? filtered : normalized;
+      // Debug info for developer — remove or guard in production
+      console.debug(
+        "datalogs: total=",
+        normalized.length,
+        "filtered=",
+        filtered.length,
+        "using=",
+        logsToUse.length
+      );
+      if (cutoff) console.debug("cutoffMs=", cutoff.getTime());
+      // ensure logs stored in state are sorted ascending by time
+      setLogs(
+        logsToUse.slice().sort((a, b) => {
+          if (a.timestampMs == null && b.timestampMs == null) return 0;
+          if (a.timestampMs == null) return 1;
+          if (b.timestampMs == null) return -1;
+          return a.timestampMs - b.timestampMs;
+        })
+      );
 
-      // Collect unique battery IDs
-      const ids = [...new Set(data.map((l) => l.batteryId).filter(Boolean))];
+      // Collect unique battery IDs from the raw/normalized data
+      const ids = [
+        ...new Set(normalized.map((l) => l.batteryId).filter(Boolean)),
+      ];
       setBatteryIds(ids);
 
-      // Update current snapshot
-      if (filtered.length > 0) {
-        const last = filtered[filtered.length - 1];
+      // Update current snapshot (use last available entry from logsToUse)
+      if (logsToUse.length > 0) {
+        const last = logsToUse[logsToUse.length - 1];
         setSensor({
           voltage: last.voltage,
           current: last.current,
@@ -81,11 +148,16 @@ const Dashboard = () => {
     }
   };
 
+  // Use numeric timestampMs (if available) to generate labels — this keeps
+  // labels consistent with the filtering which uses timestampMs
   const labels = logs.map((log) =>
-    new Date(log.timestamp).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
+    new Date(log.timestampMs || Date.parse(log.timestamp)).toLocaleTimeString(
+      [],
+      {
+        hour: "2-digit",
+        minute: "2-digit",
+      }
+    )
   );
 
   const currentData = {
@@ -198,7 +270,7 @@ const Dashboard = () => {
           <Graph id="currentGraph" type="line" data={currentData} />
         </div>
         <div>
-          <h3 className="text-lg font-semibold mb-2">Temperature (°C)</h3>
+          <h3 className="text-lg font-semibold mb-2">Temperature (Â°C)</h3>
           <Graph id="temperatureGraph" type="line" data={temperatureData} />
         </div>
         <div>

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, redirect, url_for
+from flask import Flask, request, jsonify, redirect, url_for, session
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
@@ -12,11 +12,12 @@ from models import (
     BattHealth,
     BattFaultLog,
     MqttData
-    
 )
 import jwt
 from datetime import datetime, timedelta
 from authlib.integrations.flask_client import OAuth
+from authlib.integrations.base_client.errors import MismatchingStateError
+from urllib.parse import quote_plus
 
 # Load environment variables
 load_dotenv()
@@ -25,12 +26,30 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'secret!')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Session cookie settings
+# Configure session cookie behavior. For local development we want cookies
+# to be sent on the OAuth redirect back from Google. Use environment vars to
+# control these values. If SESSION_COOKIE_SAMESITE is set to the string
+# 'None' we treat it as Python None.
+samesite = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
+if samesite == 'None':
+    samesite = None
+app.config['SESSION_COOKIE_SAMESITE'] = samesite
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
+# Recommend HttpOnly for session cookies
+app.config['SESSION_COOKIE_HTTPONLY'] = True
 
-db.init_app(app)
+# CORS
 CORS(app, origins=[
     os.getenv("CORS_ORIGIN1", "http://localhost:5173"),
-    os.getenv("CORS_ORIGIN2", "http://localhost:3000")
-])
+    os.getenv("CORS_ORIGIN2", "http://localhost:3000"),
+    os.getenv("CORS_ORIGIN3", "http://127.0.0.1:5173"),
+    os.getenv("CORS_ORIGIN4", "http://127.0.0.1:3000")
+], supports_credentials=True,
+   methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+   allow_headers=["Content-Type", "Authorization"])
+
+db.init_app(app)
 
 JWT_SECRET = os.getenv('JWT_SECRET', 'dev_secret')
 JWT_EXPIRY_MINUTES = int(os.getenv('JWT_EXPIRY_MINUTES', 60))
@@ -100,7 +119,6 @@ def login():
     return jsonify({'error': 'Invalid credentials'}), 401
 
 
-
 @app.route('/api/auth/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -111,7 +129,6 @@ def register():
     if not all(field in data for field in required_fields):
         return jsonify({'error': 'Missing required fields'}), 400
 
-    # Check if user exists
     if TblUser.query.filter(
         (TblUser.username == data['username']) | (TblUser.email == data['email'])
     ).first():
@@ -125,13 +142,11 @@ def register():
         if not company:
             return jsonify({'error': f'Company with ID {company_id} does not exist'}), 400
     else:
-        # Auto-create default company if none provided
         company = CompanyProfile(company_name="Default Company", email="default@company.com")
         db.session.add(company)
-        db.session.flush()  # ensures company_id is generated
+        db.session.flush()
         company_id = company.company_id
 
-    # Create user
     hashed_pw = generate_password_hash(data['password'])
     user = TblUser(
         username=data['username'],
@@ -141,7 +156,6 @@ def register():
         phone=data.get('ph_no'),
         security_qn=data.get('security_qn'),
         security_ans=data.get('security_ans'),
-        
         role=data.get('role', 'user'),
     )
 
@@ -149,7 +163,6 @@ def register():
         db.session.add(user)
         db.session.commit()
         token = create_jwt(user)
-
         company_info = {
             "company_id": company.company_id,
             "company_name": company.company_name,
@@ -157,7 +170,6 @@ def register():
             "is_active": company.is_active,
             "created_at": company.created_at.isoformat() if company.created_at else None,
         }
-
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': 'Database error', 'details': str(e)}), 500
@@ -174,55 +186,81 @@ def register():
 
 @app.route('/api/auth/google')
 def google_login():
-    redirect_uri = url_for('google_callback', _external=True)
+    redirect_uri = os.getenv('OAUTH_REDIRECT_URI') or url_for('google_callback', _external=True)
+    app.logger.debug('Starting Google OAuth, redirect_uri=%s', redirect_uri)
+    try:
+        app.logger.debug('Session before redirect: %s', dict(session))
+    except Exception:
+        app.logger.debug('Session not serializable for logging')
     return google.authorize_redirect(redirect_uri)
 
 
 @app.route('/api/auth/google/callback')
 def google_callback():
-    if google is None:
-        return jsonify({"error": "Google OAuth client not registered"}), 500
-    token = google.authorize_access_token()
+    frontend = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+    try:
+        token = google.authorize_access_token()
+    except MismatchingStateError as mse:
+        # Log details for debugging
+        app.logger.warning('MismatchingStateError during OAuth callback: %s', mse)
+        app.logger.debug('Callback request args: %s', request.args.to_dict())
+        try:
+            app.logger.debug('Session at callback: %s', dict(session))
+        except Exception:
+            app.logger.debug('Session not serializable for logging')
+
+        # Developer convenience: optionally allow a fallback to accept the
+        # returned state and retry the token exchange. THIS WEAKENS CSRF
+        # PROTECTION and should only be enabled for local development.
+        if os.getenv('OAUTH_DEV_FALLBACK', 'False').lower() == 'true':
+            fallback_state = request.args.get('state')
+            if fallback_state:
+                app.logger.warning('Applying OAUTH_DEV_FALLBACK: setting session oauth_state=%s', fallback_state)
+                session['oauth_state'] = fallback_state
+            try:
+                token = google.authorize_access_token()
+            except Exception as e:
+                app.logger.exception('Fallback token exchange failed: %s', e)
+                return redirect(f"{frontend}/qauth?error=oauth_state_mismatch")
+        else:
+            # Redirect to QAuth with error
+            return redirect(f"{frontend}/qauth?error=oauth_state_mismatch")
+
     if not token:
-        return jsonify({"error": "Failed to get access token from Google"}), 400
+        return jsonify({"error": "Failed to get access token"}), 400
+
     userinfo = google.parse_id_token(token)
     if not userinfo:
-        return jsonify({"error": "Failed to parse user info from token"}), 400
+        return jsonify({"error": "Failed to parse user info"}), 400
 
     email = userinfo.get('email')
     username = userinfo.get('name', email.split('@')[0])
     user = TblUser.query.filter_by(email=email).first()
 
-    if not user:
-        user = TblUser(
-            username=username,
-            email=email,
-            password=generate_password_hash(os.urandom(16).hex()),
-            company_id=None,
-            ph_no=None,
-            security_qn=None,
-            ip=request.remote_addr,
-            role=os.getenv("DEFAULT_USER_ROLE", "user"),
-            created_at=datetime.utcnow()
-        )
-        db.session.add(user)
-        db.session.commit()
+    if user:
+        access_token = create_jwt(user)
+        # Redirect to QAuth with JWT token
+        return redirect(f"{frontend}/qauth?token={quote_plus(access_token)}")
+    else:
+        # Redirect to register page with prefilled email & name
+        return redirect(f"{frontend}/register?email={quote_plus(email)}&name={quote_plus(username)}")
 
-    access_token = create_jwt(user)
-    return jsonify({
-        'message': 'Google login successful',
-        'token': access_token,
-        'u_id': user.u_id,
-        'username': user.username,
-        'email': user.email,
-        'company_id': user.company_id,
-        'role': user.role
-    })
+
+@app.route("/api/auth/check-email", methods=["GET"])
+def check_email():
+    email = request.args.get("email")
+    if not email:
+        return jsonify({"error": "Email required"}), 400
+    user = TblUser.query.filter_by(email=email).first()
+    if user:
+        return jsonify({"exists": True, "user": {"u_id": user.u_id, "username": user.username, "email": user.email}}), 200
+    return jsonify({"exists": False}), 200
+
+
 @app.route("/api/auth/forgot-password", methods=["POST"])
 def forgot_password():
     data = request.get_json()
     email = data.get("email")
-
     if not email:
         return jsonify({"error": "Email is required"}), 400
 
@@ -231,6 +269,8 @@ def forgot_password():
         return jsonify({"error": "User not found"}), 404
 
     return jsonify({"security_qn": user.security_qn}), 200
+
+
 @app.route("/api/auth/reset-password", methods=["POST"])
 def reset_password():
     data = request.get_json()
@@ -250,12 +290,10 @@ def reset_password():
 
     user.password = generate_password_hash(new_password)
     db.session.commit()
-
     return jsonify({"message": "Password reset successful"}), 200
 
+
 # ---------------- DATALOG ROUTE ----------------
-
-
 @app.route("/api/datalogs", methods=["GET"])
 def get_datalogs():
     start_date = request.args.get("start")
@@ -283,19 +321,15 @@ def get_datalogs():
             pass
 
     logs = query.order_by(MqttData.ts.desc()).all()
-
-    data = []
-    for log in logs:
-        data.append({
-            "timestamp": log.ts.isoformat(sep=" ", timespec="seconds"),
-            "current": str(log.current),
-            "temperature": str(log.temperature),
-            "voltage": str(log.voltage),
-            "batteryId": str(log.battery_id)
-        })
+    data = [{
+        "timestamp": log.ts.isoformat(sep=" ", timespec="seconds"),
+        "current": str(log.current),
+        "temperature": str(log.temperature),
+        "voltage": str(log.voltage),
+        "batteryId": str(log.battery_id)
+    } for log in logs]
 
     return jsonify(data), 200
-
 
 
 # ---------------- ROOT ROUTE ----------------
@@ -307,7 +341,7 @@ def home():
 # ---------------- RUN APP ----------------
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()  # will ensure all tables exist
+        db.create_all()
     app.run(
         host=os.getenv("FLASK_RUN_HOST", "0.0.0.0"),
         port=int(os.getenv("FLASK_RUN_PORT", 8000))
