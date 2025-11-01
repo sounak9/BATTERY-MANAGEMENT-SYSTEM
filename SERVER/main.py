@@ -18,6 +18,8 @@ from datetime import datetime, timedelta
 from authlib.integrations.flask_client import OAuth
 from authlib.integrations.base_client.errors import MismatchingStateError
 from urllib.parse import quote_plus
+from typing import Any, cast
+from authlib.integrations.flask_client import OAuth, FlaskOAuth2App
 
 # Load environment variables
 load_dotenv()
@@ -26,35 +28,43 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'secret!')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# Session cookie settings
-# Configure session cookie behavior. For local development we want cookies
-# to be sent on the OAuth redirect back from Google. Use environment vars to
-# control these values. If SESSION_COOKIE_SAMESITE is set to the string
-# 'None' we treat it as Python None.
-samesite = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
-if samesite == 'None':
-    samesite = None
-app.config['SESSION_COOKIE_SAMESITE'] = samesite
-app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
-# Recommend HttpOnly for session cookies
-app.config['SESSION_COOKIE_HTTPONLY'] = True
 
-# CORS
-CORS(app, origins=[
+# Session configuration
+app.config.update(
+    # Session cookie settings
+    SESSION_COOKIE_SAMESITE=os.getenv('SESSION_COOKIE_SAMESITE', 'Lax'),
+    SESSION_COOKIE_SECURE=os.getenv('SESSION_COOKIE_SECURE', 'False').lower() == 'true',
+    SESSION_COOKIE_HTTPONLY=True,
+    # Make cookies work with OAuth flow
+    SESSION_COOKIE_PATH='/',
+    # Increase session lifetime for OAuth flow
+    PERMANENT_SESSION_LIFETIME=timedelta(minutes=5),
+    # Session key prefix to avoid conflicts
+    SESSION_KEY_PREFIX='bms_auth_'
+)
+
+# CORS setup
+CORS_ORIGINS = [
     os.getenv("CORS_ORIGIN1", "http://localhost:5173"),
     os.getenv("CORS_ORIGIN2", "http://localhost:3000"),
     os.getenv("CORS_ORIGIN3", "http://127.0.0.1:5173"),
     os.getenv("CORS_ORIGIN4", "http://127.0.0.1:3000")
-], supports_credentials=True,
-   methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-   allow_headers=["Content-Type", "Authorization"])
+]
+app.config['CORS_ORIGINS'] = CORS_ORIGINS
+
+CORS(app, 
+     origins=CORS_ORIGINS,
+     supports_credentials=True,
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization"],
+     expose_headers=["Set-Cookie"])
 
 db.init_app(app)
 
 JWT_SECRET = os.getenv('JWT_SECRET', 'dev_secret')
 JWT_EXPIRY_MINUTES = int(os.getenv('JWT_EXPIRY_MINUTES', 60))
 
-# Google OAuth
+# Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 GOOGLE_DISCOVERY_URL = os.getenv(
@@ -62,17 +72,28 @@ GOOGLE_DISCOVERY_URL = os.getenv(
     "https://accounts.google.com/.well-known/openid-configuration"
 )
 
+if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+    raise RuntimeError("Google OAuth credentials not configured. Check your .env file.")
+
+# Initialize OAuth with app
 oauth = OAuth(app)
+
+# Configure Google OAuth
 google = oauth.register(
     name='google',
     client_id=GOOGLE_CLIENT_ID,
     client_secret=GOOGLE_CLIENT_SECRET,
     server_metadata_url=GOOGLE_DISCOVERY_URL,
-    client_kwargs={'scope': 'openid email profile'}
+    client_kwargs={
+        'scope': 'openid email profile',
+        'prompt': 'select_account'  # Always show account selector
+    },
+    authorize_params={
+        'access_type': 'offline'    # Get refresh token
+    }
 )
 
-if google is None:
-    raise RuntimeError("Google OAuth registration failed. Check your environment variables.")
+
 
 
 # ---------------- JWT Helper ----------------
@@ -186,64 +207,153 @@ def register():
 
 @app.route('/api/auth/google')
 def google_login():
-    redirect_uri = os.getenv('OAUTH_REDIRECT_URI') or url_for('google_callback', _external=True)
-    app.logger.debug('Starting Google OAuth, redirect_uri=%s', redirect_uri)
+    # Always use the configured redirect URI
+    redirect_uri = os.getenv('OAUTH_REDIRECT_URI')
+    if not redirect_uri:
+        app.logger.error('OAUTH_REDIRECT_URI not configured!')
+        return jsonify({"error": "OAuth configuration error"}), 500
+        
+    app.logger.info('Starting Google OAuth, redirect_uri=%s', redirect_uri)
+    
+    # Clear any existing session data
+    session.clear()
+    
+    # Log request details
+    app.logger.info('Request headers: %s', dict(request.headers))
+    app.logger.info('Initial session: %s', dict(session))
+    app.logger.info('Request cookies: %s', dict(request.cookies))
+    
+    # Create/update session
     try:
-        app.logger.debug('Session before redirect: %s', dict(session))
-    except Exception:
-        app.logger.debug('Session not serializable for logging')
-    return google.authorize_redirect(redirect_uri)
+        session['oauth_initiated'] = True
+        session['oauth_start_time'] = datetime.utcnow().isoformat()
+        session.modified = True
+        app.logger.info('Session initialized - oauth_initiated=True, time=%s', session['oauth_start_time'])
+    except Exception as e:
+        app.logger.error('Failed to modify session: %s', str(e))
+
+    try:
+        # Get the response with the OAuth redirect
+        resp = google.authorize_redirect(redirect_uri)
+        
+        # Log full response details
+        app.logger.info('OAuth redirect response:')
+        app.logger.info('Status: %s', resp.status_code)
+        app.logger.info('Headers: %s', dict(resp.headers))
+        app.logger.info('Updated session after redirect: %s', dict(session))
+        
+        # Add CORS headers that might help with cookie handling
+        resp.headers['Access-Control-Allow-Credentials'] = 'true'
+        origins = app.config.get('CORS_ORIGINS', [
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:3000"
+        ])
+        if request.headers.get('Origin') in origins:
+            resp.headers['Access-Control-Allow-Origin'] = request.headers['Origin']
+            
+        return resp
+        
+    except Exception as e:
+        app.logger.error('Failed to create OAuth redirect: %s', str(e))
+        raise
 
 
 @app.route('/api/auth/google/callback')
 def google_callback():
     frontend = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+    
+    # Log full callback request details
+    app.logger.info('OAuth callback received:')
+    app.logger.info('URL: %s', request.url)
+    app.logger.info('Args: %s', request.args.to_dict())
+    app.logger.info('Headers: %s', dict(request.headers))
+    app.logger.info('Cookies: %s', dict(request.cookies))
+    
+    # Get the state and code from the request
+    callback_state = request.args.get('state')
+    callback_code = request.args.get('code')
+    
+    if not callback_state or not callback_code:
+        app.logger.error('Missing state or code in callback')
+        return redirect(f"{frontend}/qauth?error=invalid_callback")
+    
     try:
+        # First attempt - try normal flow
         token = google.authorize_access_token()
+        app.logger.info('Successfully obtained token through normal flow')
     except MismatchingStateError as mse:
-        # Log details for debugging
-        app.logger.warning('MismatchingStateError during OAuth callback: %s', mse)
-        app.logger.debug('Callback request args: %s', request.args.to_dict())
+        app.logger.warning('Initial state mismatch, attempting recovery...')
+        
         try:
-            app.logger.debug('Session at callback: %s', dict(session))
-        except Exception:
-            app.logger.debug('Session not serializable for logging')
-
-        # Developer convenience: optionally allow a fallback to accept the
-        # returned state and retry the token exchange. THIS WEAKENS CSRF
-        # PROTECTION and should only be enabled for local development.
-        if os.getenv('OAUTH_DEV_FALLBACK', 'False').lower() == 'true':
-            fallback_state = request.args.get('state')
-            if fallback_state:
-                app.logger.warning('Applying OAUTH_DEV_FALLBACK: setting session oauth_state=%s', fallback_state)
-                session['oauth_state'] = fallback_state
-            try:
-                token = google.authorize_access_token()
-            except Exception as e:
-                app.logger.exception('Fallback token exchange failed: %s', e)
-                return redirect(f"{frontend}/qauth?error=oauth_state_mismatch")
-        else:
-            # Redirect to QAuth with error
-            return redirect(f"{frontend}/qauth?error=oauth_state_mismatch")
+            # Clear any existing session
+            session.clear()
+            # Set the received state
+            session['oauth_state'] = callback_state
+            # Force session save
+            session.modified = True
+            
+            # Try to authorize again
+            token = google.authorize_access_token()
+            app.logger.info('Successfully recovered from state mismatch')
+        except Exception as e:
+            app.logger.error('Recovery failed: %s', str(e))
+            
+            # If we're in development, try one last time with a fresh session
+            if os.getenv('OAUTH_DEV_FALLBACK', 'False').lower() == 'true':
+                try:
+                    # Clear session and try one more time
+                    session.clear()
+                    session['oauth_state'] = callback_state
+                    session.modified = True
+                    
+                    token = google.authorize_access_token()
+                    app.logger.info('Dev fallback succeeded')
+                except Exception as e:
+                    app.logger.error('Dev fallback failed: %s', str(e))
+                    # Instead of redirecting to a new OAuth flow, redirect with the error
+                    return redirect(f"{frontend}/qauth?error=auth_failed&message={str(e)}")
+            else:
+                return redirect(f"{frontend}/qauth?error=auth_failed&message={str(e)}")
 
     if not token:
         return jsonify({"error": "Failed to get access token"}), 400
 
-    userinfo = google.parse_id_token(token)
-    if not userinfo:
+    try:
+        userinfo = token.get('userinfo')
+        if not userinfo:
+            # Fallback to parsing ID token if userinfo not available
+            userinfo = google.parse_id_token(token, nonce=session.get('nonce'))
+        if not userinfo:
+            return jsonify({"error": "Failed to get user info"}), 400
+    except Exception as e:
+        app.logger.error(f"Failed to parse user info: {str(e)}")
         return jsonify({"error": "Failed to parse user info"}), 400
 
-    email = userinfo.get('email')
-    username = userinfo.get('name', email.split('@')[0])
+    email = str(userinfo.get('email', ''))
+    if not email:
+        return jsonify({"error": "No email in user info"}), 400
+
+    name = str(userinfo.get('name', ''))
+    username = name if name else email.split('@')[0]
+
     user = TblUser.query.filter_by(email=email).first()
 
     if user:
         access_token = create_jwt(user)
-        # Redirect to QAuth with JWT token
-        return redirect(f"{frontend}/qauth?token={quote_plus(access_token)}")
+        # Redirect to the frontend OAuth callback which will store the token and
+        # redirect the user to the app home.
+        redirect_url = f"{frontend}/oauth-callback?token={quote_plus(str(access_token))}"
+        return redirect(redirect_url)
     else:
         # Redirect to register page with prefilled email & name
-        return redirect(f"{frontend}/register?email={quote_plus(email)}&name={quote_plus(username)}")
+        params = {
+            'email': quote_plus(email),
+            'name': quote_plus(username)
+        }
+        redirect_url = f"{frontend}/register?email={params['email']}&name={params['name']}"
+        return redirect(redirect_url)
 
 
 @app.route("/api/auth/check-email", methods=["GET"])
