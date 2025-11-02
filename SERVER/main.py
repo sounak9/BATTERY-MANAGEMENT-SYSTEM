@@ -262,7 +262,7 @@ def google_login():
 
 @app.route('/api/auth/google/callback')
 def google_callback():
-    frontend = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+    frontend = os.getenv('FRONTEND_URL', 'http://localhost:3000/')
     
     # Log full callback request details
     app.logger.info('OAuth callback received:')
@@ -342,17 +342,14 @@ def google_callback():
 
     if user:
         access_token = create_jwt(user)
-        # Redirect to the frontend OAuth callback which will store the token and
-        # redirect the user to the app home.
-        redirect_url = f"{frontend}/oauth-callback?token={quote_plus(str(access_token))}"
+        # ✅ Send user back to frontend OAuth success route
+        redirect_url = f"http://localhost:3000/oauth-callback?token={quote_plus(access_token)}"
+        app.logger.info(f"Redirecting existing user to: {redirect_url}")
         return redirect(redirect_url)
     else:
-        # Redirect to register page with prefilled email & name
-        params = {
-            'email': quote_plus(email),
-            'name': quote_plus(username)
-        }
-        redirect_url = f"{frontend}/register?email={params['email']}&name={params['name']}"
+        # ✅ Redirect to register page with prefilled info
+        redirect_url = f"http://localhost:3000/register?email={quote_plus(email)}&name={quote_plus(username)}"
+        app.logger.info(f"Redirecting new user to: {redirect_url}")
         return redirect(redirect_url)
 
 

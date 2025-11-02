@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
-import { getApiUrl } from "../lib/backend";
+import { getApiUrl } from "../../lib/backend";
 
 export default function Login() {
   const [email, setEmail] = useState("");

@@ -11,12 +11,12 @@ import Header from "./components/Header";
 import Dashboard from "./pages/Dashboard";
 import DataLogs from "./pages/DataLogs";
 import Sensors from "./pages/Sensors";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
+import Login from "./pages/authentication/Login";
+import Register from "./pages/authentication/Register";
 import Profile from "./pages/UserProfile";
-import ForgotPassword from "./pages/ForgotPassword";
-import AuthCallback from "./pages/AuthCallback";
-import QAuth from "./pages/QAuth";
+import ForgotPassword from "./pages/authentication/ForgotPassword";
+import AuthCallback from "./pages/authentication/AuthCallback";
+import QAuth from "./pages/authentication/QAuth";
 
 // Simple auth check using localStorage
 function RequireAuth({ children }) {
