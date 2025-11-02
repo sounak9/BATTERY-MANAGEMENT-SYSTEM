@@ -13,7 +13,7 @@ import DataLogs from "./pages/DataLogs";
 import Sensors from "./pages/Sensors";
 import Login from "./pages/authentication/Login";
 import Register from "./pages/authentication/Register";
-import Profile from "./pages/UserProfile";
+import Profile from "./components/UserProfile";
 import ForgotPassword from "./pages/authentication/ForgotPassword";
 import AuthCallback from "./pages/authentication/AuthCallback";
 import QAuth from "./pages/authentication/QAuth";

@@ -20,14 +20,49 @@ from authlib.integrations.base_client.errors import MismatchingStateError
 from urllib.parse import quote_plus
 from typing import Any, cast
 from authlib.integrations.flask_client import OAuth, FlaskOAuth2App
+from functools import wraps
 
 # Load environment variables
 load_dotenv()
-
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'secret!')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+
+        # Get the token from Authorization header
+        if "Authorization" in request.headers:
+            parts = request.headers["Authorization"].split()
+            if len(parts) == 2 and parts[0].lower() == "bearer":
+                token = parts[1]
+
+        if not token:
+            return jsonify({"message": "Missing token"}), 401
+
+        try:
+            # ✅ Use JWT_SECRET (not SECRET_KEY)
+            data = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+
+            # Retrieve user from DB
+            current_user = TblUser.query.get(data.get("u_id"))
+            if not current_user:
+                return jsonify({"message": "User not found"}), 404
+
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Invalid token"}), 401
+        except Exception as e:
+            return jsonify({"message": f"Token validation failed: {str(e)}"}), 401
+
+        return f(current_user, *args, **kwargs)
+
+    return decorated
+
 
 # Session configuration
 app.config.update(
@@ -399,7 +434,28 @@ def reset_password():
     db.session.commit()
     return jsonify({"message": "Password reset successful"}), 200
 
+@app.route("/api/auth/me", methods=["GET"])
+@token_required
+def get_me(current_user):
+    """Return current logged-in user details"""
+    company = None
+    if current_user.company_id:
+        company = CompanyProfile.query.get(current_user.company_id)
 
+    return jsonify({
+        "u_id": current_user.u_id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "ph_no": current_user.phone,
+        "role": current_user.role,
+        "security_qn": current_user.security_qn,
+        "ip": request.remote_addr,
+        "company": {
+            "company_name": company.company_name if company else None,
+            "email": company.email if company else None,
+            "is_active": company.is_active if company else None,
+        } if company else None,
+    })
 # ---------------- DATALOG ROUTE ----------------
 @app.route("/api/datalogs", methods=["GET"])
 def get_datalogs():
