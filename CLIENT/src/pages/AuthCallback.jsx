@@ -28,12 +28,19 @@ export default function AuthCallback() {
           u_id: decoded.u_id || decoded.sub || null,
           username: decoded.username || decoded.name || decoded.email || null,
           email: decoded.email || null,
+          role: decoded.role || decoded["role"] || "user",
         };
         localStorage.setItem("user", JSON.stringify(user));
+        // navigate based on role
+        const role = (user.role || "user").toLowerCase();
+        if (role === "admin") {
+          navigate("/admin", { replace: true });
+          return;
+        }
       } catch (e) {
         // ignore decode errors
       }
-      // remove token from URL and redirect
+      // remove token from URL and redirect (default)
       navigate("/", { replace: true });
     } else {
       // no token — go to login

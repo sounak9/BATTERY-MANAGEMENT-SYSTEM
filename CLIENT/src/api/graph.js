@@ -1,6 +1,8 @@
 // src/api/graph.js
+import { getApiUrl } from "../lib/backend";
+
 export const fetchGraphData = async ({ batteryId = "All", start, end }) => {
-  const url = new URL("http://localhost:8000/api/graph");
+  const url = new URL(`${getApiUrl()}/graph`);
 
   if (batteryId && batteryId !== "All") {
     url.searchParams.append("battery_id", batteryId);

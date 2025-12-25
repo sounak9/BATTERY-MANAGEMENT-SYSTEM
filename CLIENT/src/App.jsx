@@ -17,6 +17,7 @@ import Profile from "./components/UserProfile";
 import ForgotPassword from "./pages/authentication/ForgotPassword";
 import AuthCallback from "./pages/authentication/AuthCallback";
 import QAuth from "./pages/authentication/QAuth";
+import FaultLogs from "./pages/FaultLogs";
 
 // Simple auth check using localStorage
 function RequireAuth({ children }) {
@@ -51,6 +52,7 @@ export default function App() {
                       <Route path="/data-logs" element={<DataLogs />} />
                       <Route path="/sensors" element={<Sensors />} />
                       <Route path="/profile" element={<Profile />} />
+                      <Route path="/fault-logs" element={<FaultLogs />} />
                     </Routes>
                   </main>
                 </div>

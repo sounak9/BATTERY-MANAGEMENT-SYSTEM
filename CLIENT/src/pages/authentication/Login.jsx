@@ -5,17 +5,16 @@ import { getApiUrl } from "../../lib/backend";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState("user"); // default role
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Handle OAuth mismatch (same as before)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const err = params.get("error");
     if (err === "oauth_state_mismatch") {
-      // If Google OAuth failed due to state mismatch, send user to register
-      // page so they can either retry or register manually. Preserve email/name
-      // if present.
       const email = params.get("email");
       const name = params.get("name");
       const qs = new URLSearchParams();
@@ -27,12 +26,10 @@ export default function Login() {
   }, [location.search, navigate]);
 
   const handleGoogleLogin = () => {
-    // REACT_APP_API_URL may include a trailing '/api' (some setups), so
-    // normalize it to the backend origin (no trailing '/api') before
-    // building the oauth redirect URL.
     const apiBase = getApiUrl();
     window.location.href = `${apiBase}/auth/google`;
   };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -41,14 +38,21 @@ export default function Login() {
       const res = await fetch(`${getApiUrl()}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, role }), // ✅ include role
       });
 
       const data = await res.json();
       if (res.ok) {
         localStorage.setItem("token", data.token);
         localStorage.setItem("isAuthenticated", "true");
-        navigate("/"); // redirect to dashboard
+        localStorage.setItem("role", role); // ✅ store role in localStorage
+
+        // ✅ Redirect based on role
+        if (role === "admin") {
+          navigate("/admin");
+        } else {
+          navigate("/");
+        }
       } else {
         setError(data.error || "Login failed");
       }
@@ -73,6 +77,7 @@ export default function Login() {
             onChange={(e) => setEmail(e.target.value)}
             required
           />
+
           <input
             type="password"
             placeholder="Password"
@@ -81,6 +86,18 @@ export default function Login() {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
+
+          {/* ✅ Role Dropdown */}
+          <select
+            className="w-full p-2 border rounded text-black"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            required
+          >
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+
           <div className="text-center mt-2">
             <Link
               to="/forgot-password"
@@ -89,13 +106,16 @@ export default function Login() {
               Forgot Password?
             </Link>
           </div>
+
           <button
             type="submit"
             className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
           >
             Login
           </button>
+
           <button
+            type="button"
             onClick={handleGoogleLogin}
             className="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded mt-4"
           >
@@ -104,7 +124,7 @@ export default function Login() {
         </form>
 
         <div className="text-center mt-2 text-black">
-          Don't have an account?{" "}
+          Don’t have an account?{" "}
           <Link to="/register" className="text-blue-600 hover:underline">
             Register
           </Link>

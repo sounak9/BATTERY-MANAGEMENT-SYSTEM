@@ -6,12 +6,14 @@ import {
   MdList,
   MdSensors,
   MdLogout,
+  MdError, // ← NEW ICON
 } from "react-icons/md";
 
 const sidebarItems = [
   { to: "/", icon: <MdDashboard size={28} />, label: "Dashboard" },
   { to: "/settings", icon: <MdSettings size={28} />, label: "Settings" },
   { to: "/data-logs", icon: <MdList size={28} />, label: "Data Logs" },
+  { to: "/fault-logs", icon: <MdError size={28} />, label: "Fault Logs" }, // ← NEW MENU ITEM
   { to: "/sensors", icon: <MdSensors size={28} />, label: "Sensors" },
 ];
 
@@ -33,7 +35,9 @@ const Sidebar = () => (
         </NavLink>
       ))}
     </div>
-    <div className="flex-grow" /> {/* Spacer */}
+
+    <div className="flex-grow" />
+
     <div
       className="flex flex-col items-center text-gray-400 hover:text-white cursor-pointer mt-8"
       onClick={() => {

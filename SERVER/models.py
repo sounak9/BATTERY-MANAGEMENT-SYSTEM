@@ -124,7 +124,6 @@ class MqttData(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     ts = db.Column(db.DateTime(timezone=True), nullable=False)
-    topic = db.Column(db.Text)
     device_id = db.Column(db.Text)
     battery_id = db.Column(db.Integer)
     voltage = db.Column(db.Numeric(6, 3))

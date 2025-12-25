@@ -1,3 +1,5 @@
+import { getApiUrl } from "../lib/backend";
+
 export async function fetchDatalogs({ start, end, batteryId } = {}) {
   const params = new URLSearchParams();
 
@@ -5,7 +7,7 @@ export async function fetchDatalogs({ start, end, batteryId } = {}) {
   if (end) params.append("end", end); // expects YYYY-MM-DD
   if (batteryId && batteryId !== "All") params.append("battery_id", batteryId);
 
-  const url = `http://localhost:8000/api/datalogs?${params.toString()}`;
+  const url = `${getApiUrl()}/datalogs?${params.toString()}`;
 
   try {
     const res = await fetch(url, {

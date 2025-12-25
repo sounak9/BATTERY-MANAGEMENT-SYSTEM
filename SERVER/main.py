@@ -494,6 +494,96 @@ def get_datalogs():
 
     return jsonify(data), 200
 
+# ---------------- FAULT LOGS ROUTE ----------------
+@app.route("/api/fault-logs", methods=["GET"])
+def get_fault_logs():
+    start_date = request.args.get("start")
+    end_date = request.args.get("end")
+    battery_id = request.args.get("battery_id")
+    fault_type = request.args.get("fault_type")
+
+    query = db.session.query(BattFaultLog)
+
+    # Start date filtering
+    if start_date:
+        try:
+            query = query.filter(BattFaultLog.detected_at >= datetime.fromisoformat(start_date))
+        except Exception:
+            pass
+
+    # End date filtering
+    if end_date:
+        try:
+            query = query.filter(BattFaultLog.detected_at <= datetime.fromisoformat(end_date))
+        except Exception:
+            pass
+
+    # Filter by battery ID
+    if battery_id and battery_id.lower() != "all":
+        try:
+            query = query.filter(BattFaultLog.batt_uid == int(battery_id))
+        except ValueError:
+            pass
+
+    # Filter by fault type
+    if fault_type and fault_type.lower() != "all":
+        query = query.filter(BattFaultLog.fault_type == fault_type)
+
+    logs = query.order_by(BattFaultLog.detected_at.desc()).all()
+
+    data = []
+    for log in logs:
+        data.append({
+            "fault_id": log.fault_id,
+            "battery_id": log.batt_uid,
+            "fault_type": log.fault_type,
+            "severity": log.severity,
+            "predicted_by": log.predicted_by,
+            "note": log.note,
+            "resolve_text": log.resolve_text,
+            "detected_at": log.detected_at.isoformat(sep=" ", timespec="seconds")
+        })
+
+    return jsonify(data), 200
+
+import csv
+from io import StringIO
+from flask import Response
+
+@app.route("/api/fault-logs/csv", methods=["GET"])
+def download_fault_logs_csv():
+    query = db.session.query(BattFaultLog).order_by(BattFaultLog.detected_at.desc()).all()
+
+    si = StringIO()
+    writer = csv.writer(si)
+
+    writer.writerow([
+        "fault_id", "battery_id", "fault_type", "severity",
+        "predicted_by", "note", "resolve_text", "detected_at"
+    ])
+
+    for log in query:
+        writer.writerow([
+            log.fault_id,
+            log.batt_uid,
+            log.fault_type,
+            log.severity,
+            log.predicted_by,
+            log.note,
+            log.resolve_text,
+            log.detected_at
+        ])
+
+    output = si.getvalue()
+
+    return Response(
+        output,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=fault_logs.csv"}
+    )
+
+
+
 
 # ---------------- ROOT ROUTE ----------------
 @app.route("/")
